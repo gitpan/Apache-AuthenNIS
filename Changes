@@ -1,5 +1,8 @@
 Revision history for Perl extension Apache::AuthenNIS.
 
+0.13  Apr 19  21:41 2004
+  - fixed the missed call to check for status
+
 0.12  Apr 19  18:41 2004
   - Added parameter AllowAlternateAuth to allow for
     authentication to fall back from AuthenNIS.

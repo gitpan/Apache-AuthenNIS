@@ -4,7 +4,7 @@ use strict;
 # use Apache::Constants ':common';
 use Net::NIS;
 
-$Apache::AuthenNIS::VERSION = '0.12';
+$Apache::AuthenNIS::VERSION = '0.13';
 
 ############################################
 # here is where we start the new code....
@@ -57,17 +57,23 @@ sub handler {
     my ($status, $entry) = Net::NIS::yp_match($domain, "passwd.byname", $name);
 
     if($status) {
-	my $error_msg = Net::NIS::yperr_string($status);
-	$r->note_basic_auth_failure;
-	MP2 ? $r->log_error("Apache::AuthenNIS - user $name: yp_match: status $status, $error_msg", $r->uri) : $r->log_reason("Apache::AuthenNIS - user $name: yp_match: status $status, $error_msg", $r->uri);
-	return MP2 ? Apache::HTTP_UNAUTHORIZED : Apache::Constants::HTTP_UNAUTHORIZED;
-
+        if (lc($allowaltauth) eq "yes" && $status == 5)
+        {
+            return MP2 ? Apache::DECLINED : Apache::Constants::DECLINED;
+        }
+        else
+        {
+            my $error_msg = Net::NIS::yperr_string($status);
+            $r->note_basic_auth_failure;
+            MP2 ? $r->log_error("Apache::AuthenNIS - user $name: yp_match: status $status, $error_msg", $r->uri) : $r->log_reason("Apache::AuthenNIS - user $name: yp_match: status $status, $error_msg", $r->uri);
+            return MP2 ? Apache::HTTP_UNAUTHORIZED : Apache::Constants::HTTP_UNAUTHORIZED;
+        }
     }
 
     my ($user, $hash, $uid, $gid, $gecos, $dir, $shell) = split(/:/, $entry);
 
     if(crypt($sent_pwd, $hash) eq $hash) {
-	return MP2 ? Apache::OK : Apache::Constants::OK;
+        return MP2 ? Apache::OK : Apache::Constants::OK;
     } else {
         if (lc($allowaltauth) eq "yes")
         {
