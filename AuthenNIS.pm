@@ -1,29 +1,59 @@
 package Apache::AuthenNIS;
 
 use strict;
-use Apache::Constants ':common';
+# use Apache::Constants ':common';
 use Net::NIS;
 
-$Apache::AuthenNIS::VERSION = '0.10';
+$Apache::AuthenNIS::VERSION = '0.11';
+
+############################################
+# here is where we start the new code....
+############################################
+use mod_perl ;
+
+# setting the constants to help identify which version of mod_perl
+# is installed
+use constant MP2 => ($mod_perl::VERSION >= 1.99);
+
+# test for the version of mod_perl, and use the appropriate libraries
+BEGIN {
+        if (MP2) {
+                require Apache::Const;
+                require Apache::Access;
+                require Apache::Connection;
+                require Apache::Log;
+                require Apache::RequestRec;
+                require Apache::RequestUtil;
+                Apache::Const->import(-compile => 'HTTP_UNAUTHORIZED','OK', 'HTTP_INTERNAL_SERVER_ERROR');
+        } else {
+                require Apache::Constants;
+                Apache::Constants->import('HTTP_UNAUTHORIZED','OK', 'HTTP_INTERNAL_SERVER_ERROR');
+        }
+}
+##################### end modperl code ######################
 
 sub handler {
     my $r = shift;
     my($res, $sent_pwd) = $r->get_basic_auth_pw;
     return $res if $res; #decline if not Basic
 
-    my $name = $r->connection->user;
+    my $name = MP2 ? $r->user : $r->connection->user;
 
     my $domain = Net::NIS::yp_get_default_domain();
     unless($domain) {
 	$r->note_basic_auth_failure;
-        $r->log_reason("Apache::AuthenNIS - cannot obtain NIS domain", $r->uri);
-	return SERVER_ERROR;
+        MP2 ?  $r->log_error("Apache::AuthenNIS - cannot obtain NIS domain", $r->uri) : $r->log_reason("Apache::AuthenNIS - cannot obtain NIS domain", $r->uri);
+	return MP2 ? Apache::HTTP_INTERNAL_SERVER_ERROR : Apache::Constants::HTTP_INTERNAL_SERVER_ERROR;
+
+
+
     }
 
     if ($name eq "") {
 	$r->note_basic_auth_failure;
-        $r->log_reason("Apache::AuthenNIS - no username given", $r->uri);
-        return AUTH_REQUIRED;
+        MP2 ? $r->log_error("Apache::AuthenNIS - no username given", $r->uri) : $r->log_reason("Apache::AuthenNIS - no username given", $r->uri);
+       return MP2 ? Apache::HTTP_UNAUTHORIZED : Apache::Constants::HTTP_UNAUTHORIZED;
+ 
     }
 
     my ($status, $entry) = Net::NIS::yp_match($domain, "passwd.byname", $name);
@@ -31,21 +61,22 @@ sub handler {
     if($status) {
 	my $error_msg = Net::NIS::yperr_string($status);
 	$r->note_basic_auth_failure;
-	$r->log_reason("Apache::AuthenNIS - user $name: yp_match: status $status, $error_msg", $r->uri);
-	return AUTH_REQUIRED;
+	MP2 ? $r->log_error("Apache::AuthenNIS - user $name: yp_match: status $status, $error_msg", $r->uri) : $r->log_reason("Apache::AuthenNIS - user $name: yp_match: status $status, $error_msg", $r->uri);
+	return MP2 ? Apache::HTTP_UNAUTHORIZED : Apache::Constants::HTTP_UNAUTHORIZED;
+
     }
 
     my ($user, $hash, $uid, $gid, $gecos, $dir, $shell) = split(/:/, $entry);
 
     if(crypt($sent_pwd, $hash) eq $hash) {
-	return OK;
+	return MP2 ? Apache::OK : Apache::Constants::OK;
     } else {
 	$r->note_basic_auth_failure;
-	$r->log_reason("Apache::AuthenNIS - user $name: bad password", $r->uri);
-	return AUTH_REQUIRED;
+	MP2 ? $r->log_error("Apache::AuthenNIS - user $name: bad password", $r->uri) : $r->log_reason("Apache::AuthenNIS - user $name: bad password", $r->uri);
+	return MP2 ? Apache::HTTP_UNAUTHORIZED : Apache::Constants::HTTP_UNAUTHORIZED;
     }
 
-    return OK;
+    return MP2 ? Apache::OK : Apache::Constants::OK;
 }
 
 1;
@@ -109,6 +140,7 @@ that it was written hastily, to say the least.
 =head1 AUTHOR
 
 Demetrios E. Paneras <dep@media.mit.edu>
+Ported by Shannon Eric Peevey <speeves@unt.edu>
 
 =head1 COPYRIGHT
 

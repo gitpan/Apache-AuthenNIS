@@ -1,4 +1,9 @@
 Revision history for Perl extension Apache::AuthenNIS.
 
+0.11  Aug 01  18:41 2003
+	- Ported to work with both versions of mod_perl
+	- Changed Makefile.PL to use ExtUtils::AutoInstall
+	- Added test.pl for make test 
+ 
 0.10  Sun Oct 25 18:41 1998
 	- First Beta Release
