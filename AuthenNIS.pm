@@ -4,7 +4,7 @@ use strict;
 # use Apache::Constants ':common';
 use Net::NIS;
 
-$Apache::AuthenNIS::VERSION = '0.11';
+$Apache::AuthenNIS::VERSION = '0.12';
 
 ############################################
 # here is where we start the new code....
@@ -24,10 +24,10 @@ BEGIN {
                 require Apache::Log;
                 require Apache::RequestRec;
                 require Apache::RequestUtil;
-                Apache::Const->import(-compile => 'HTTP_UNAUTHORIZED','OK', 'HTTP_INTERNAL_SERVER_ERROR');
+                Apache::Const->import(-compile => 'HTTP_UNAUTHORIZED','OK', 'HTTP_INTERNAL_SERVER_ERROR', 'DECLINED');
         } else {
                 require Apache::Constants;
-                Apache::Constants->import('HTTP_UNAUTHORIZED','OK', 'HTTP_INTERNAL_SERVER_ERROR');
+                Apache::Constants->import('HTTP_UNAUTHORIZED','OK', 'HTTP_INTERNAL_SERVER_ERROR', 'DECLINED');
         }
 }
 ##################### end modperl code ######################
@@ -39,21 +39,19 @@ sub handler {
 
     my $name = MP2 ? $r->user : $r->connection->user;
 
+    my $allowaltauth = $r->dir_config('AllowAlternateAuth') || "no";
+
     my $domain = Net::NIS::yp_get_default_domain();
     unless($domain) {
 	$r->note_basic_auth_failure;
         MP2 ?  $r->log_error("Apache::AuthenNIS - cannot obtain NIS domain", $r->uri) : $r->log_reason("Apache::AuthenNIS - cannot obtain NIS domain", $r->uri);
 	return MP2 ? Apache::HTTP_INTERNAL_SERVER_ERROR : Apache::Constants::HTTP_INTERNAL_SERVER_ERROR;
-
-
-
     }
 
     if ($name eq "") {
 	$r->note_basic_auth_failure;
         MP2 ? $r->log_error("Apache::AuthenNIS - no username given", $r->uri) : $r->log_reason("Apache::AuthenNIS - no username given", $r->uri);
        return MP2 ? Apache::HTTP_UNAUTHORIZED : Apache::Constants::HTTP_UNAUTHORIZED;
- 
     }
 
     my ($status, $entry) = Net::NIS::yp_match($domain, "passwd.byname", $name);
@@ -71,9 +69,16 @@ sub handler {
     if(crypt($sent_pwd, $hash) eq $hash) {
 	return MP2 ? Apache::OK : Apache::Constants::OK;
     } else {
-	$r->note_basic_auth_failure;
-	MP2 ? $r->log_error("Apache::AuthenNIS - user $name: bad password", $r->uri) : $r->log_reason("Apache::AuthenNIS - user $name: bad password", $r->uri);
-	return MP2 ? Apache::HTTP_UNAUTHORIZED : Apache::Constants::HTTP_UNAUTHORIZED;
+        if (lc($allowaltauth) eq "yes")
+        {
+           return MP2 ? Apache::DECLINED : Apache::Constants::DECLINED;
+        }
+        else
+        {
+	         $r->note_basic_auth_failure;
+	         MP2 ? $r->log_error("Apache::AuthenNIS - user $name: bad password", $r->uri) : $r->log_reason("Apache::AuthenNIS - user $name: bad password", $r->uri);
+	         return MP2 ? Apache::HTTP_UNAUTHORIZED : Apache::Constants::HTTP_UNAUTHORIZED;
+	      }
     }
 
     return MP2 ? Apache::OK : Apache::Constants::OK;
@@ -95,6 +100,9 @@ Apache::AuthenNIS - mod_perl NIS Authentication module
     AuthType Basic
 
     PerlAuthenHandler Apache::AuthenNIS
+
+    # Set if you want to allow an alternate method of authentication
+    PerlSetVar AllowAlternateAuth yes | no
 
     # Standard require stuff, NIS users or groups, and
     # "valid-user" all work OK
@@ -136,6 +144,18 @@ be handled by B<Apache::AuthzNIS>.
 
 I welcome any feedback on this module, esp. code improvements, given
 that it was written hastily, to say the least.
+
+= head3 Parameters
+
+=over 4
+
+=item PerlSetVar AllowAlternateAuth
+
+This attribute allows you to set an alternative method of authentication
+(Basically, this allows you to mix authentication methods, if you don't have
+ all users in the NIS database). It does this by returning a DECLINE and checking
+ for the next handler, which could be another authentication, such as
+Apache-AuthenNTLM or basic authentication.
 
 =head1 AUTHOR
 

@@ -9,6 +9,9 @@ SYNOPSIS
 
          PerlAuthenHandler Apache::AuthenNIS
 
+         # Set if you want to allow an alternate method of authentication
+         PerlSetVar AllowAlternateAuth yes | no
+
          # Standard require stuff, NIS users or groups, and
          # "valid-user" all work OK
          require user username1 username2 ...
@@ -54,6 +57,16 @@ DESCRIPTION
      improvements, given that it was written hastily, to say the
      least.
 
+     Parameters
+     
+     PerlSetVar AllowAlternateAuth
+
+     This attribute allows you to set an alternative method of authentication
+     (Basically, this allows you to mix authentication methods, if you don't have
+     all users in the NIS database). It does this by returning a DECLINE and checking
+     for the next handler, which could be another authentication, such as
+     Apache-AuthenNTLM or basic authentication.
+  
 
 AUTHOR
      Demetrios E. Paneras <dep@media.mit.edu>
